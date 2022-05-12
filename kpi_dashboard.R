@@ -14,6 +14,7 @@ library(tidyquant)
 library(timetk)
 library(priceR)
 library(shinythemes)
+library(plotly)
 # tinytex::install_tinytex() # install tinytex() if you get an error: "No LaTeX installation detected"
 # dir_script <- dirname(rstudioapi::getSourceEditorContext()$path) # extract the filepath in which this script and dataset are saved
 # # setwd(dir_script) # set working directory so the script finds the dataset
@@ -48,15 +49,13 @@ d1 <-
     total_sales = sum(Sales),
     orders = n(),
     avg_gpp = mean(Profit)/mean(Sales)
-  )
-
-d1 <- 
-  pivot_longer(d1, # pivot longer so we can subset by KPI in the time series figure
+  ) %>%
+  pivot_longer( # pivot longer so we can subset by KPI in the time series figure
                cols = 2:4, 
                names_to = "type",
                values_to = "value"
   )
-format(min(d1$Order.Date), "%d %b %Y")
+#format(min(d1$Order.Date), "%d %b %Y")
 
 
 # Define UI
@@ -105,11 +104,26 @@ server <- function(input, output) {
     validate(need(input$date[1] < input$date[2], "Error: Start date should be earlier than end date."))
     d1 %>%
       filter(
-        type == input$type,
-        Order.Date > as.POSIXct(input$date[1]) & Order.Date < as.POSIXct(input$date[2]
-        ))
+        type == 'total_sales',
+        Order.Date > as.POSIXct('2017-01-01') & Order.Date < as.POSIXct('2021-12-31'
+        ))%>%
+      mutate(
+        fitted = fitted(loess(value ~ as.numeric(Order.Date))),
+        upper_CI = value + (1.96 * predict(loess(value ~ as.numeric(Order.Date)), se=T)[["se.fit"]]),
+        lower_CI = value - (1.96 * predict(loess(value ~ as.numeric(Order.Date)), se=T)[["se.fit"]])
+      )
+    # plx <- predict(loess(d1()$value ~ as.numeric(d1()$Order.Date)), se=T) # calculate SE for each prediction for plotting; https://stackoverflow.com/questions/22717930/how-to-get-the-confidence-intervals-for-lowess-fit-using-r
+    # d1()$fitted <- fitted(loess(d1()$value ~ as.numeric(d1()$Order.Date))) # calculate the fitted (predicted) value
+    # d1()$upper_CI <- d1()$value + (1.96 * plx[["se.fit"]]) # calculate the upper 95% CI
+    # d1()$lower_CI <- d1()$value - (1.96 * plx[["se.fit"]]) # calculate the lower 95% CI
   })
   
+  # 
+  # plx <- predict(loess(selected_trends()$value ~ as.numeric(selected_trends()$Order.Date)), se=T) # calculate SE for each prediction for plotting; https://stackoverflow.com/questions/22717930/how-to-get-the-confidence-intervals-for-lowess-fit-using-r
+  # selected_trends()$fitted <- fitted(loess(selected_trends()$value ~ as.numeric(selected_trends()$Order.Date))) # calculate the fitted (predicted) value
+  # selected_trends()$upper_CI <- selected_trends()$value + (1.96 * plx[["se.fit"]]) # calculate the upper 95% CI
+  # selected_trends()$lower_CI <- selected_trends()$value - (1.96 * plx[["se.fit"]]) # calculate the lower 95% CI
+  # 
   
   # Create scatterplot object the plotOutput function is expecting
   # output$lineplot <- renderPlot({
@@ -125,27 +139,79 @@ server <- function(input, output) {
   # })
   
   output$lineplot <- renderPlotly({
-    #color = "#434343"
-    # par(mar = c(4, 4, 1, 1))
-    # plot(x = selected_trends()$Order.Date, y = selected_trends()$value, type = "l",
-    #      xlab = "Date", ylab = "KPI", col = color, fg = color, col.lab = color, col.axis = color) # https://stackoverflow.com/questions/53127403/reactive-axis-labels-in-shiny-r
     plot_ly(
-      x = selected_trends()$Order.Date,
-      y = selected_trends()$value,
-      type="scatter",
-      mode = "markers+lines",
-      hoverinfo = 'text',
-      text = ~paste('</br> Date: ', format(selected_trends()$Order.Date, "%b %Y"),
-                    '</br> Revenue: ', dollar_format()(selected_trends()$value)
-      )
-    ) %>%
-      layout(hovermode = "x unified",
-             title = "Running mean" # reactive for plot title?
+            showlegend = FALSE
+            ) %>%
+      layout(
+        hovermode = "x unified",
+        title = "Monthly means with loess and 95% CI" # reactive for plot title?
+        ) %>%
+      add_trace(y = selected_trends()$value,
+                type="scatter",
+                mode = "markers+lines",
+                hoverinfo = 'text',
+                text = ~paste('</br> Date: ', format(selected_trends()$month, "%b %Y"),
+                              '</br> Revenue: ', dollar_format()(selected_trends()$value)
+                ),
+                line=list(
+                  width = 1
+                )
       ) %>%
-      add_trace(y = fitted(loess(selected_trends()$value ~ as.numeric(selected_trends()$Order.Date)
+      add_trace(y = fitted(loess(selected_trends()$value ~ as.numeric(selected_trends()$month))) + (1.96 * plx[["se.fit"]]), 
+                type = 'scatter',
+                mode = 'lines',
+                hoverinfo = 'text',
+                text = ~paste('</br> Upper 95% CI: ', dollar_format()(selected_trends()$upper_CI)
+                ),
+                line=list(
+                  color='#000000',
+                  dash = 'dot',
+                  width = 1
+                )
+      ) %>%
+      add_trace(y = selected_trends()$fitted,
+                type = 'scatter',
+                mode = 'lines',
+                hoverinfo = 'text',
+                text = ~paste('</br> Predicted: ', dollar_format()(selected_trends()$fitted)
+                ),
+                line=list(
+                  color='blue',
+                  dash = 'dash',
+                  width = 1
+                )
+      ) %>%
+      add_trace(y = fitted(loess(selected_trends()$value ~ as.numeric(selected_trends()$month))) - (1.96 * plx[["se.fit"]]),
+                type = 'scatter',
+                mode = 'lines',
+                hoverinfo = 'text',
+                text = ~paste('</br> Lower 95% CI: ', dollar_format()(selected_trends()$lower_CI)
+                ),
+                line=list(
+                  color='#000000',
+                  dash = 'dot',
+                  width = 1
+                )
       )
-      )
-      )
+    
+    
+    # plot_ly(
+    #   x = selected_trends()$Order.Date,
+    #   y = selected_trends()$value,
+    #   type="scatter",
+    #   mode = "markers+lines",
+    #   hoverinfo = 'text',
+    #   text = ~paste('</br> Date: ', format(selected_trends()$Order.Date, "%b %Y"),
+    #                 '</br> Revenue: ', dollar_format()(selected_trends()$value)
+    #   )
+    # ) %>%
+    #   layout(hovermode = "x unified",
+    #          title = "Monthly means with loess curve" # reactive for plot title?
+    #   ) %>%
+    #   add_trace(y = fitted(loess(selected_trends()$value ~ as.numeric(selected_trends()$Order.Date)
+    #   )
+    #   )
+    #   )
     # Display only if smoother is checked
     # if(input$smoother){
     #   smooth_curve <- lowess(x = as.numeric(selected_trends()$Order.Date), y = selected_trends()$value, f = input$f)
