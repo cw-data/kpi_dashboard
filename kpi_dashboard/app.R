@@ -1,18 +1,5 @@
-# for reproducibility define required packages and set working directory
-# library(tidyverse)
-# library(rstudioapi)
-# library(janitor)
-# library(reshape2)
-# library(scales)
-# library(lubridate)
-# library(gt)
-# #library(cowplot)
-# library(grid)
-# library(patchwork) # devtools::install_github("thomasp85/patchwork")
-# # library(egg)
-# # library(latticeExtra)
-# # library(pdp)
-# library(ggrepel)
+# https://shiny.rstudio.com/
+
 library(tidyverse)
 library(rstudioapi)
 library(janitor)
@@ -70,6 +57,7 @@ d1 <-
   )
 format(min(d1$Order.Date), "%d %b %Y")
 
+
 # Define UI
 ui <- fluidPage(theme = shinytheme("lumen"),
                 titlePanel("Schrute Paper KPI Dashboard"),
@@ -82,7 +70,7 @@ ui <- fluidPage(theme = shinytheme("lumen"),
                                 selected = "Travel"),
                     
                     # Select date range to be plotted
-                    dateRangeInput("date", strong("Date range"), start = format(min(d1$Order.Date), "%d %b %Y"), end = format(max(d1$Order.Date), "%d %b %Y"),
+                    dateRangeInput("date", strong("Date range"), start = min(d1$Order.Date), end = max(d1$Order.Date),
                                    min = min(d1$Order.Date), max = max(d1$Order.Date)),
                     
                     # Select whether to overlay smooth trend line
@@ -99,7 +87,7 @@ ui <- fluidPage(theme = shinytheme("lumen"),
                   
                   # Output: Description, lineplot, and reference
                   mainPanel(
-                    plotOutput(outputId = "lineplot", height = "300px"),
+                    plotlyOutput(outputId = "lineplot", height = "300px"),
                     textOutput(outputId = "desc")
                     #tags$a(href = "https://www.google.com/finance/domestic_trends", "Source: Google Domestic Trends", target = "_blank")
                   )
@@ -123,24 +111,53 @@ server <- function(input, output) {
   
   
   # Create scatterplot object the plotOutput function is expecting
-  output$lineplot <- renderPlot({
-    color = "#434343"
-    par(mar = c(4, 4, 1, 1))
-    plot(x = selected_trends()$Order.Date, y = selected_trends()$value, type = "l",
-         xlab = "Date", ylab = "KPI", col = color, fg = color, col.lab = color, col.axis = color) # https://stackoverflow.com/questions/53127403/reactive-axis-labels-in-shiny-r
-    # Display only if smoother is checked
-    if(input$smoother){
-      smooth_curve <- lowess(x = as.numeric(selected_trends()$Order.Date), y = selected_trends()$value, f = input$f)
-      lines(smooth_curve, col = "#E6553A", lwd = 3)
-    }
-  })
-  
-  # # Pull in description of trend
-  # output$desc <- renderText({
-  #   trend_text <- filter(trend_description, type == input$type) %>% pull(text)
-  #   paste(trend_text, "The index is set to 1.0 on January 1, 2004 and is calculated only for US search traffic.")
+  # output$lineplot <- renderPlot({
+  #   color = "#434343"
+  #   par(mar = c(4, 4, 1, 1))
+  #   plot(x = selected_trends()$Order.Date, y = selected_trends()$value, type = "l",
+  #        xlab = "Date", ylab = "KPI", col = color, fg = color, col.lab = color, col.axis = color) # https://stackoverflow.com/questions/53127403/reactive-axis-labels-in-shiny-r
+  #   # Display only if smoother is checked
+  #   if(input$smoother){
+  #     smooth_curve <- lowess(x = as.numeric(selected_trends()$Order.Date), y = selected_trends()$value, f = input$f)
+  #     lines(smooth_curve, col = "#E6553A", lwd = 3)
+  #   }
   # })
+  
+  output$lineplot <- renderPlotly({
+    #color = "#434343"
+    # par(mar = c(4, 4, 1, 1))
+    # plot(x = selected_trends()$Order.Date, y = selected_trends()$value, type = "l",
+    #      xlab = "Date", ylab = "KPI", col = color, fg = color, col.lab = color, col.axis = color) # https://stackoverflow.com/questions/53127403/reactive-axis-labels-in-shiny-r
+    plot_ly(
+      x = selected_trends()$Order.Date,
+      y = selected_trends()$value,
+      type="scatter",
+      mode = "markers+lines",
+      hoverinfo = 'text',
+      text = ~paste('</br> Date: ', format(selected_trends()$Order.Date, "%b %Y"),
+                    '</br> Revenue: ', dollar_format()(selected_trends()$value)
+      )
+    ) %>%
+      layout(hovermode = "x unified",
+             title = "Monthly means with loess" # reactive for plot title?
+      ) %>%
+      add_trace(y = fitted(loess(selected_trends()$value ~ as.numeric(selected_trends()$Order.Date)
+      )
+      )
+      )
+    # Display only if smoother is checked
+    # if(input$smoother){
+    #   smooth_curve <- lowess(x = as.numeric(selected_trends()$Order.Date), y = selected_trends()$value, f = input$f)
+    #   lines(smooth_curve, col = "#E6553A", lwd = 3)
+  }
+  )
 }
+
+# # Pull in description of trend
+# output$desc <- renderText({
+#   trend_text <- filter(trend_description, type == input$type) %>% pull(text)
+#   paste(trend_text, "The index is set to 1.0 on January 1, 2004 and is calculated only for US search traffic.")
+# })
 
 # Create Shiny object
 shinyApp(ui = ui, server = server)
