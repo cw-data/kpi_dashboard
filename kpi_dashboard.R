@@ -1,6 +1,5 @@
 # https://shiny.rstudio.com/
 
-
 library(tidyverse)
 library(rstudioapi)
 library(janitor)
@@ -15,9 +14,9 @@ library(timetk)
 library(priceR)
 library(shinythemes)
 library(plotly)
-# tinytex::install_tinytex() # install tinytex() if you get an error: "No LaTeX installation detected"
-# dir_script <- dirname(rstudioapi::getSourceEditorContext()$path) # extract the filepath in which this script and dataset are saved
-# # setwd(dir_script) # set working directory so the script finds the dataset
+
+################# Prep Data #################
+
 data <- read.csv("cleandata.csv", header = TRUE) # load data, from https://www.kaggle.com/datasets/vivek468/superstore-dataset-final?resource=download
 # 
 # #------------ data cleaning #------------
@@ -67,6 +66,24 @@ for (i in 1:length(type_list)){
   type_list[[i]]["se_fit"] <- predict(loess(type_list[[i]][["value"]] ~ as.numeric(type_list[[i]][["Order.Date"]])), se=T)[["se.fit"]]
 }
 d1 <- do.call("rbind", type_list) # rbind the dataframes from type_list to replace d1 for use in selected_inputs()
+
+# format percentages for plotting
+d1$value <- ifelse(d1$type == 'avg_gpp',
+                   d1$value * 100,
+                   d1$value)
+d1$fitted <- ifelse(d1$type == 'avg_gpp',
+                    d1$fitted * 100,
+                    d1$fitted)
+d1$upper_CI <- ifelse(d1$type == 'avg_gpp',
+                      d1$upper_CI * 100,
+                      d1$upper_CI)
+d1$lower_CI <- ifelse(d1$type == 'avg_gpp',
+                      d1$lower_CI * 100,
+                      d1$lower_CI)
+d1$se_fit <- ifelse(d1$type == 'avg_gpp',
+                    d1$se_fit * 100,
+                    d1$se_fit)
+
 
 # create label columns for hovertext and figure titles in kpi time series (output$lineplot)
 d1$label_date <- paste0('Date: ', format(d1$Order.Date, "%b %Y"))
@@ -123,8 +140,19 @@ d1$title <- ifelse(d1$type == 'avg_gpp',
                                  "")
                    )
 )
+d1$label_yaxis <- ifelse(d1$type == 'avg_gpp',
+                         paste0('Gross profit (%)'),
+                         ifelse(d1$type == 'total_sales',
+                                paste0('Monthly revenue'),
+                                ifelse(d1$type == 'orders',
+                                       paste0('Monthly orders'),
+                                       "")
+                         )
+)
+d1$label_xaxis <- "Date"
 
-# Define UI
+################# End Prep Data #################
+################# Define UI #################
 ui <- fluidPage(theme = shinytheme("lumen"),
                 titlePanel("Schrute Paper KPI Dashboard"),
                 sidebarLayout(
@@ -150,7 +178,8 @@ ui <- fluidPage(theme = shinytheme("lumen"),
                 )
 )
 
-# Define server function
+################# End Define UI #################
+################# Define Server #################
 server <- function(input, output) {
   
   # Subset data
@@ -168,13 +197,14 @@ server <- function(input, output) {
   output$lineplot <- renderPlotly({
     
     
-    plot_ly(
-      showlegend = FALSE
-    ) %>%
+    plot_ly(showlegend = FALSE) %>%
       layout(hovermode = "x unified",
-             title = selected_trends()$title[1] # reactive for plot title?
+             title = selected_trends()$title[1], # reactive for plot title
+             yaxis = list(title = selected_trends()$label_yaxis[1]),
+             xaxis = list(title = selected_trends()$label_xaxis[1])
       ) %>%
-      add_trace(y = selected_trends()$value,
+      add_trace(x = selected_trends()$Order.Date,
+                y = selected_trends()$value,
                 type="scatter",
                 mode = "markers+lines",
                 hoverinfo = 'text',
@@ -185,7 +215,8 @@ server <- function(input, output) {
                   width = 1
                 )
       ) %>%
-      add_trace(y = selected_trends()$fitted + 1.96*selected_trends()$se_fit, 
+      add_trace(x = selected_trends()$Order.Date,
+                y = selected_trends()$fitted + 1.96*selected_trends()$se_fit, 
                 type = 'scatter',
                 mode = 'lines',
                 hoverinfo = 'text',
@@ -196,7 +227,8 @@ server <- function(input, output) {
                   width = 1
                 )
       ) %>%
-      add_trace(y = selected_trends()$fitted,
+      add_trace(x = selected_trends()$Order.Date,
+                y = selected_trends()$fitted,
                 type = 'scatter',
                 mode = 'lines',
                 hoverinfo = 'text',
@@ -207,7 +239,8 @@ server <- function(input, output) {
                   width = 1
                 )
       ) %>%
-      add_trace(y = selected_trends()$fitted - 1.96*selected_trends()$se_fit,
+      add_trace(x = selected_trends()$Order.Date,
+                y = selected_trends()$fitted - 1.96*selected_trends()$se_fit,
                 type = 'scatter',
                 mode = 'lines',
                 hoverinfo = 'text',
@@ -222,6 +255,8 @@ server <- function(input, output) {
     
   })
 }
+################# End Define Server #################
 
-# Create Shiny object
+################# Create Shiny object #################
 shinyApp(ui = ui, server = server)
+################# End Create Shiny object #################
