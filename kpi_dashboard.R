@@ -14,6 +14,8 @@ library(timetk)
 library(priceR)
 library(shinythemes)
 library(plotly)
+library(shinydashboard)
+library(DT)
 
 ################# Prep Data #################
 
@@ -24,7 +26,7 @@ working_data <- data # work on a copy of the data
 # # change date columns to class:date
 cols.to.date <- grep('date', names(working_data), ignore.case = TRUE) # find index of column(s) containing the word 'date'
 for (i in 1:length(cols.to.date)){
-  working_data[,cols.to.date[i]] <- as.Date(working_data[,cols.to.date[i]], format = '%Y-%m-%d') # change columns containing the word 'date' to Date format
+  working_data[,cols.to.date[i]] <- as.Date(working_data[,cols.to.date[i]], format = '%m/%d/%Y') # change columns containing the word 'date' to Date format
 }
 # # change factor columns to class:factor
 data.classes <- lapply(working_data, class) # find the class of all columns
@@ -104,11 +106,11 @@ d1$type_pretty <- ifelse(d1$type %in% c('avg_gpp'),
                                                      ifelse(d1$type == 'avg_gp',
                                                             'Average order gross profit ($)',
                                                             '')
-                                                     )
                                               )
                                        )
                                 )
                          )
+)
 
 
 d1$label_value <- paste0(d1$type_pretty, ':', ifelse(d1$type %in% c('avg_gpp'),
@@ -116,18 +118,18 @@ d1$label_value <- paste0(d1$type_pretty, ':', ifelse(d1$type %in% c('avg_gpp'),
                                                      ifelse(d1$type == 'orders',
                                                             round(d1$value, 0),
                                                             paste0(' ', format_dollars(d1$value))
-                                                            )
                                                      )
-                         )
+)
+)
 
 d1$label_upper_95 <- paste0('Upper 95% CI: ', ifelse(d1$type %in% c('avg_gpp'),
                                                      paste0(' ', sprintf("%0.0f%%", d1$upper_CI), ' of revenue'),
                                                      ifelse(d1$type == 'orders',
                                                             round(d1$upper_CI, 0),
                                                             paste0(' ', format_dollars(d1$upper_CI))
-                                                            )
                                                      )
-                            )
+)
+)
 
 
 d1$label_fitted <- paste0('Predicted: ', ifelse(d1$type %in% c('avg_gpp'),
@@ -135,18 +137,18 @@ d1$label_fitted <- paste0('Predicted: ', ifelse(d1$type %in% c('avg_gpp'),
                                                 ifelse(d1$type == 'orders',
                                                        round(d1$fitted, 0),
                                                        paste0(' ', format_dollars(d1$fitted))
-                                                       )
                                                 )
-                          )
+)
+)
 
 d1$label_lower_95 <- paste0('Lower 95% CI: ', ifelse(d1$type %in% c('avg_gpp'),
                                                      paste0(' ', sprintf("%0.0f%%", d1$lower_CI), ' of revenue'),
                                                      ifelse(d1$type == 'orders',
                                                             round(d1$lower_CI, 0),
                                                             paste0(' ', format_dollars(d1$lower_CI))
-                                                            )
                                                      )
-                            )
+)
+)
 
 # custom plot tiltles for each d1$type
 d1$title <- ifelse(d1$type == 'avg_gpp',
@@ -172,7 +174,7 @@ d1$title <- ifelse(d1$type == 'avg_gpp',
 d1$label_yaxis <- ifelse(d1$type == 'avg_gpp',
                          paste0('Gross profit (%)'),
                          ifelse(d1$type == 'total_sales',
-                                paste0('Monthly revenue'),
+                                paste0('Monthly revenue ($)'),
                                 ifelse(d1$type == 'orders',
                                        paste0('Monthly orders'),
                                        ifelse(d1$type == 'avg_sale',
@@ -192,29 +194,52 @@ d1$label_xaxis <- "Date"
 
 ################# End Prep Data #################
 ################# Define UI #################
-ui <- fluidPage(theme = shinytheme("lumen"),
-                titlePanel("Schrute Paper KPI Dashboard"),
-                sidebarLayout(
-                  sidebarPanel(
-                    
-                    # Select type of trend to plot
-                    selectInput(inputId = "type", label = strong("Performance Metric"),
-                                choices = unique(d1$type_pretty),
-                                selected = "Travel"),
-                    
-                    # Select date range to be plotted
-                    dateRangeInput("date", strong("Date range"), start = min(d1$Order.Date), end = max(d1$Order.Date),
-                                   min = min(d1$Order.Date), max = max(d1$Order.Date)),
-                    
-                  ),
-                  
-                  # Output: Description, lineplot, and reference
-                  mainPanel(
-                    plotlyOutput(outputId = "lineplot", height = "300px"),
-                    textOutput(outputId = "desc")
-                    #tags$a(href = "https://www.google.com/finance/domestic_trends", "Source: Google Domestic Trends", target = "_blank")
-                  )
+
+ui <- dashboardPage(
+  dashboardHeader(title = "Schrute Paper KPI Dashboard",
+                  titleWidth = 300),
+  dashboardSidebar(
+    width = 300,
+    sidebarMenu(
+      menuItem("KPI time-series", tabName = "dashboard", icon = icon("dashboard")),
+      menuItem("Data download", tabName = "download_item", icon = icon("th"))
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      # First tab content
+      tabItem(tabName = "dashboard",
+              h2("KPI time-series"),
+              fluidPage(
+                mainPanel(
+                  selectInput(inputId = "type", label = strong("Choose a key performance indicator"),
+                              choices = unique(d1$type_pretty),
+                              selected = "Travel"),
+                  dateRangeInput("date", strong("Choose a date range"), start = min(d1$Order.Date), end = max(d1$Order.Date),
+                                 min = min(d1$Order.Date), max = max(d1$Order.Date)),
+                  plotlyOutput(outputId = "lineplot", height = "150%", width = "150%")
+                  # tableOutput('table')
                 )
+              )
+      ),
+      
+
+      
+      # Second tab content
+      tabItem(tabName = "download_item",
+              h2("Download a .csv of the data"),
+              fluidPage(
+                mainPanel(
+                  selectInput("dataset", "Choose a dataset:",
+                              choices = c("Full dataset", "Regression summary")),
+                  downloadButton("downloadData", "Download"),
+                  DT::dataTableOutput("table", width = "150%")
+                  # tableOutput('table')
+                )
+              )
+      )
+    )
+  )
 )
 
 ################# End Define UI #################
@@ -238,9 +263,16 @@ server <- function(input, output) {
     
     plot_ly(showlegend = FALSE) %>%
       layout(hovermode = "x unified",
-             title = selected_trends()$title[1], # reactive for plot title
+             title = list(text = selected_trends()$title[1]), # reactive for plot title
              yaxis = list(title = selected_trends()$label_yaxis[1]),
-             xaxis = list(title = selected_trends()$label_xaxis[1])
+             xaxis = list(title = selected_trends()$label_xaxis[1]),
+             margin = list( # set plotly figure margins
+               l = 50,
+               r = 50,
+               b = 100,
+               t = 100,
+               pad = 4
+             )
       ) %>%
       add_trace(x = selected_trends()$Order.Date,
                 y = selected_trends()$value,
@@ -293,6 +325,28 @@ server <- function(input, output) {
     
     
   })
+  
+  datasetInput <- reactive({
+    switch(input$dataset,
+           "Full dataset" = working_data,
+           "Regression summary" = d1
+    )
+  })
+  
+  output$table = DT::renderDataTable(
+    datasetInput(),
+    options = list(scrollX = TRUE)
+  )
+  
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      paste(tolower(gsub(" ", "_", input$dataset, fixed = TRUE)), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(datasetInput(), file, row.names = FALSE)
+    }
+  )
+  
 }
 ################# End Define Server #################
 
