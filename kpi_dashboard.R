@@ -45,20 +45,26 @@ d1 <-
   timetk::summarise_by_time(
     .date_var = Order.Date,
     .by = "month",
+    avg_sale = mean(Sales),
+    avg_gp = mean(Profit),
+    avg_gpp = mean(Profit)/mean(Sales),
     total_sales = sum(Sales),
-    orders = n(),
-    avg_gpp = mean(Profit)/mean(Sales)
+    total_gp = sum(Profit),
+    # total_gpp = mean(Profit)/mean(Sales),
+    orders = n()
+    
   )
 
 d1 <- 
   pivot_longer(d1, # pivot longer so we can subset by KPI in the time series figure
-               cols = 2:4, 
+               cols = 2:7, 
                names_to = "type",
                values_to = "value"
   )
 
+
 type_list <- split(d1, d1$type)
-# loop to calcualte the fitted, CIs, and SE for each dataframe (each selected_inputs() of the data)
+# loop to calcualte the fitted and CIs for each dataframe
 for (i in 1:length(type_list)){
   type_list[[i]]["fitted"] <- fitted(loess(type_list[[i]][["value"]] ~ as.numeric(type_list[[i]][["Order.Date"]])))
   type_list[[i]]["upper_CI"] <- type_list[[i]][["fitted"]] + (1.96 * predict(loess(type_list[[i]][["value"]] ~ as.numeric(type_list[[i]][["Order.Date"]])), se=T)[["se.fit"]])
@@ -66,89 +72,122 @@ for (i in 1:length(type_list)){
   type_list[[i]]["se_fit"] <- predict(loess(type_list[[i]][["value"]] ~ as.numeric(type_list[[i]][["Order.Date"]])), se=T)[["se.fit"]]
 }
 d1 <- do.call("rbind", type_list) # rbind the dataframes from type_list to replace d1 for use in selected_inputs()
-
-# format percentages for plotting
-d1$value <- ifelse(d1$type == 'avg_gpp',
+d1$value <- ifelse(d1$type %in% c('avg_gpp'),
                    d1$value * 100,
                    d1$value)
-d1$fitted <- ifelse(d1$type == 'avg_gpp',
+d1$fitted <- ifelse(d1$type %in% c('avg_gpp'),
                     d1$fitted * 100,
                     d1$fitted)
-d1$upper_CI <- ifelse(d1$type == 'avg_gpp',
+d1$upper_CI <- ifelse(d1$type %in% c('avg_gpp'),
                       d1$upper_CI * 100,
                       d1$upper_CI)
-d1$lower_CI <- ifelse(d1$type == 'avg_gpp',
+d1$lower_CI <- ifelse(d1$type %in% c('avg_gpp'),
                       d1$lower_CI * 100,
                       d1$lower_CI)
-d1$se_fit <- ifelse(d1$type == 'avg_gpp',
+d1$se_fit <- ifelse(d1$type %in% c('avg_gpp'),
                     d1$se_fit * 100,
                     d1$se_fit)
 
-
-# create label columns for hovertext and figure titles in kpi time series (output$lineplot)
 d1$label_date <- paste0('Date: ', format(d1$Order.Date, "%b %Y"))
-d1$type_pretty <- ifelse(d1$type == 'avg_gpp',
-                         'Avg order gross profit',
+
+# pretty aliases for each d1$type
+d1$type_pretty <- ifelse(d1$type %in% c('avg_gpp'),
+                         'Average order gross profit (%)',
                          ifelse(d1$type == 'orders',
-                                'Orders',
+                                'Orders ',
                                 ifelse(d1$type == 'total_sales',
-                                       'Revenue',
-                                       "")
+                                       'Total revenue',
+                                       ifelse(d1$type == 'avg_sale',
+                                              'Average order revenue',
+                                              ifelse(d1$type == 'total_gp',
+                                                     'Total gross profit',
+                                                     ifelse(d1$type == 'avg_gp',
+                                                            'Average order gross profit ($)',
+                                                            '')
+                                                     )
+                                              )
+                                       )
+                                )
                          )
-)
-d1$label_value <- paste0(d1$type_pretty, ':', ifelse(d1$type == 'avg_gpp',
-                                                paste0(' ', sprintf("%0.0f%%", (100 * d1$value)), ' of revenue'),
-                                                ifelse(d1$type == 'total_sales',
-                                                       paste0(' ', format_dollars(d1$value)),
-                                                       paste0(round(d1$value, 0))
-                                                )
-)
-)
 
-d1$label_upper_95 <- paste0('Upper 95% CI: ', ifelse(d1$type == 'avg_gpp',
-                                                     paste0(sprintf("%0.0f%%", (100 * d1$upper_CI)), ' of revenue'),
-                                                     ifelse(d1$type == 'total_sales',
-                                                            format_dollars(d1$upper_CI),
-                                                            round(d1$upper_CI, 0)
+
+d1$label_value <- paste0(d1$type_pretty, ':', ifelse(d1$type %in% c('avg_gpp'),
+                                                     paste0(' ', sprintf("%0.0f%%", d1$value), ' of revenue'),
+                                                     ifelse(d1$type == 'orders',
+                                                            round(d1$value, 0),
+                                                            paste0(' ', format_dollars(d1$value))
+                                                            )
                                                      )
-)
-)
+                         )
 
-d1$label_fitted <- paste0('Predicted: ', ifelse(d1$type == 'avg_gpp',
-                                                paste0(sprintf("%0.0f%%", (100 * d1$fitted)), ' of revenue'),
-                                                ifelse(d1$type == 'total_sales',
-                                                       format_dollars(d1$fitted),
-                                                       round(d1$fitted, 0)
-                                                )
-)
-)
-
-d1$label_lower_95 <- paste0('Lower 95% CI: ', ifelse(d1$type == 'avg_gpp',
-                                                     paste0(sprintf("%0.0f%%", (100 * d1$lower_CI)), ' of revenue'),
-                                                     ifelse(d1$type == 'total_sales',
-                                                            format_dollars(d1$lower_CI),
-                                                            round(d1$lower_CI, 0)
+d1$label_upper_95 <- paste0('Upper 95% CI: ', ifelse(d1$type %in% c('avg_gpp'),
+                                                     paste0(' ', sprintf("%0.0f%%", d1$upper_CI), ' of revenue'),
+                                                     ifelse(d1$type == 'orders',
+                                                            round(d1$upper_CI, 0),
+                                                            paste0(' ', format_dollars(d1$upper_CI))
+                                                            )
                                                      )
-)
-)
+                            )
+
+
+d1$label_fitted <- paste0('Predicted: ', ifelse(d1$type %in% c('avg_gpp'),
+                                                paste0(' ', sprintf("%0.0f%%", d1$fitted), ' of revenue'),
+                                                ifelse(d1$type == 'orders',
+                                                       round(d1$fitted, 0),
+                                                       paste0(' ', format_dollars(d1$fitted))
+                                                       )
+                                                )
+                          )
+
+d1$label_lower_95 <- paste0('Lower 95% CI: ', ifelse(d1$type %in% c('avg_gpp'),
+                                                     paste0(' ', sprintf("%0.0f%%", d1$lower_CI), ' of revenue'),
+                                                     ifelse(d1$type == 'orders',
+                                                            round(d1$lower_CI, 0),
+                                                            paste0(' ', format_dollars(d1$lower_CI))
+                                                            )
+                                                     )
+                            )
+
+# custom plot tiltles for each d1$type
 d1$title <- ifelse(d1$type == 'avg_gpp',
                    paste0('Average order gross profit (% of revenue), loess trendline and 95% CI'),
                    ifelse(d1$type == 'total_sales',
                           paste0('Total monthly revenue, loess trendline and 95% CI'),
                           ifelse(d1$type == 'orders',
                                  paste0('Monthly order volume, loess trendline and 95% CI'),
-                                 "")
+                                 ifelse(d1$type == 'avg_sale',
+                                        'Average order revenue ($), loess trendline and 95% CI',
+                                        ifelse(d1$type == 'total_gp',
+                                               'Total monthly gross profit ($), loess trendline and 95% CI',
+                                               ifelse(d1$type == 'avg_gp',
+                                                      'Average order gross profit ($), loess trendline and 95% CI',
+                                                      '')
+                                        )
+                                 )
+                          )
                    )
 )
+
+# custom y-axis labels for each d1$type
 d1$label_yaxis <- ifelse(d1$type == 'avg_gpp',
                          paste0('Gross profit (%)'),
                          ifelse(d1$type == 'total_sales',
                                 paste0('Monthly revenue'),
                                 ifelse(d1$type == 'orders',
                                        paste0('Monthly orders'),
-                                       "")
+                                       ifelse(d1$type == 'avg_sale',
+                                              'Order revenue ($)',
+                                              ifelse(d1$type == 'total_gp',
+                                                     'Gross profit ($)',
+                                                     ifelse(d1$type == 'avg_gp',
+                                                            'Average gross profit ($)',
+                                                            '')
+                                              )
+                                       )
+                                )
                          )
 )
+
 d1$label_xaxis <- "Date"
 
 ################# End Prep Data #################
