@@ -5,10 +5,10 @@ account: cw-data
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 6306340
-bundleId: 5908643
+bundleId: 5920899
 url: https://cw-data.shinyapps.io/kpi_dashboard/
-when: 1652644639.36501
-lastSyncTime: 1652644639.36501
+when: 1652910009.33545
+lastSyncTime: 1652910009.33545
 asMultiple: FALSE
 asStatic: FALSE
 ignoredFiles: README.md
