@@ -201,7 +201,7 @@ ui <- dashboardPage(
   dashboardSidebar(
     width = 300,
     sidebarMenu(
-      menuItem("KPI time-series", tabName = "dashboard", icon = icon("dashboard")),
+      menuItem("KPI time series", tabName = "dashboard", icon = icon("dashboard")),
       menuItem("Data download", tabName = "download_item", icon = icon("th"))
     )
   ),
