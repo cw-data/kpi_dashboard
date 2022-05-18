@@ -1,0 +1,14 @@
+name: kpi_dashboard
+title: kpi_dashboard
+username:
+account: cw-data
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 6306340
+bundleId: 5908643
+url: https://cw-data.shinyapps.io/kpi_dashboard/
+when: 1652644639.36501
+lastSyncTime: 1652644639.36501
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: README.md

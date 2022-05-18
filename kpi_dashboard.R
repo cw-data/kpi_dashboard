@@ -209,7 +209,7 @@ ui <- dashboardPage(
     tabItems(
       # First tab content
       tabItem(tabName = "dashboard",
-              h2("KPI time-series"),
+              h2("KPI time series"),
               fluidPage(
                 mainPanel(
                   selectInput(inputId = "type", label = strong("Choose a key performance indicator"),
